@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"go/types"
 	"strconv"
+	"strings"
 	"unsafe"
 )
 
@@ -17,6 +18,7 @@ const (
 
 type GoPackInfo struct {
 	PackageName string
+	Imports     []*types.Package
 	StructInfo  []*StructInfo
 }
 
@@ -32,6 +34,17 @@ type StructInfo struct {
 	StructName string
 	Fields     []*FieldInfo
 	StructSize int64 // types.Sizes interface returns int64
+}
+
+// cleanStructString removes package name prefix from field type from nameless struct type string
+func cleanStructString(s string) string {
+	parts := strings.Split(s, " ")
+	for i, part := range parts {
+		if idx := strings.LastIndex(part, "."); idx >= 0 {
+			parts[i] = part[idx+1:]
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // getTypeName returns type name without package name prefix
@@ -75,7 +88,7 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 
 		switch ut := t.Underlying().(type) {
 		case *types.Struct:
-			innerSt := getStructInfo(ut, sizes, t.String())
+			innerSt := getStructInfo(ut, sizes, getTypeName(ut))
 			fldInfo.StructInfo = &innerSt
 			fldInfo.Size = sizes.Sizeof(ut)
 		case *types.Array:
@@ -94,11 +107,7 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 		fldInfos = append(fldInfos, &fldInfo)
 	}
 
-	if name != "" {
-		stInfo.StructName = name
-	} else {
-		stInfo.StructName = st.String() // use struct declarion for nameless struct
-	}
+	stInfo.StructName = cleanStructString(name)
 	stInfo.Fields = fldInfos
 	stInfo.StructSize = sizes.Sizeof(st)
 
@@ -151,6 +160,7 @@ func GetPackInfo(filename string) (GoPackInfo, error) {
 
 	return GoPackInfo{
 		PackageName: f.Name.Name,
+		Imports:     pkg.Imports(),
 		StructInfo:  structInfos,
 	}, nil
 }

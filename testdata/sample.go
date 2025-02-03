@@ -12,20 +12,20 @@ type NamedUint32_2 NamedUint32
 type AliasUintptr = uintptr
 
 type TestStruct struct {
-	Field1 uint32
-	Field2 [9]uint8
-	Field3 NamedUint32
-	Field4 [2]InnerStruct
-	Field5 [5]NamedUint32_2
-	Field6 complex128
-	Field7 AliasUintptr
-	Field8 unsafe.Pointer
-	Field9 [3]float32 
+	Field1  uint32
+	Field2  [9]uint8
+	Field3  NamedUint32
+	Field4  [2]InnerStruct
+	Field5  [5]NamedUint32_2
+	Field6  complex128
+	Field7  AliasUintptr
+	Field8  unsafe.Pointer
+	Field9  [3]float32
 	Field10 *uint64
 	EmbedStruct
-	Field11 [7]uint16
+	Field11      [7]uint16
 	NestedStruct struct {
-		NestedField uint32
+		NestedField  uint32
 		NestedField2 [9]byte
 		NestedField3 *uintptr
 		NestedField4 uint64
@@ -38,7 +38,8 @@ type InnerStruct struct {
 	InnerField3 [2]*unsafe.Pointer
 	InnerField4 uint64
 	InnerField5 [4]uint16
-	InnerField6 uintptr
+	InnerField6 [2]RepeatedStruct
+	InnerField7 uintptr
 }
 
 type EmbedStruct struct {
@@ -46,4 +47,11 @@ type EmbedStruct struct {
 	EmbedField2 NamedUint32_2
 	EmbedField3 [1]uint16
 	EmbedField4 *uintptr
+}
+
+type RepeatedStruct struct {
+	RepeatedField1 [9]uint8
+	RepeatedField2 uint64
+	RepeatedField3 []uint32
+	RepeatedField4 *unsafe.Pointer
 }
