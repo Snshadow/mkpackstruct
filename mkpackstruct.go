@@ -225,7 +225,7 @@ func (g *Generator) writeGenericStructUnpacker() {
 }
 
 func usage() {
-	fmt.Fprintf(flag.CommandLine.Output(), "mkgopack parses a go file and writes methods for packing structs into bytes buffer and vice versa.\nFor more information, see \"github.com/Snshadow/mkpackstruct\"\n\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "mkpackstruct parses a go file and writes methods for packing structs into bytes buffer and vice versa.\nFor more information, see \"github.com/Snshadow/mkpackstruct\"\n\n")
 
 	flag.Usage()
 }
