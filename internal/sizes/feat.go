@@ -6,17 +6,10 @@ import (
 	"go/types"
 )
 
-// ---- copied or modified unexported functions from "go/types" ----
+// ---- copied unexported functions from "go/types" ----
 
 // isTypeParam reports whether t is a type parameter.
 func isTypeParam(t types.Type) bool {
 	_, ok := types.Unalias(t).(*types.TypeParam)
 	return ok
-}
-
-// asNamed returns t as *Named if that is t's
-// actual type. It returns nil otherwise.
-func asNamed(t types.Type) *types.Named {
-	n, _ := types.Unalias(t).(*types.Named)
-	return n
 }
