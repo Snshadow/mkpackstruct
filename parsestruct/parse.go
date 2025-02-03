@@ -9,11 +9,8 @@ import (
 	"go/types"
 	"strconv"
 	"strings"
-	"unsafe"
-)
 
-const (
-	wordSize = unsafe.Sizeof(uintptr(0))
+	"github.com/Snshadow/mkpackstruct/internal/sizes"
 )
 
 type GoPackInfo struct {
@@ -88,7 +85,7 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 
 		switch ut := t.Underlying().(type) {
 		case *types.Struct:
-			innerSt := getStructInfo(ut, sizes, getTypeName(ut))
+			innerSt := getStructInfo(ut, sizes, getTypeName(t))
 			fldInfo.StructInfo = &innerSt
 			fldInfo.Size = sizes.Sizeof(ut)
 		case *types.Array:
@@ -126,10 +123,7 @@ func GetPackInfo(filename string) (GoPackInfo, error) {
 		return GoPackInfo{}, err
 	}
 
-	sizes := &types.StdSizes{
-		WordSize: int64(wordSize),
-		MaxAlign: 1, // no padding
-	}
+	sizes := &sizes.PackedSizes{}
 
 	conf := types.Config{
 		Importer: importer.Default(),

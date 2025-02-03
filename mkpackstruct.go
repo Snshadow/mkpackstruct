@@ -22,19 +22,21 @@ const (
 // handle repeated struct in array
 type repeatedStruct struct {
 	typeStr string
+	name    string
 	count   int
 }
 
 func parseRepeatedStruct(s string) *repeatedStruct {
-	count := 0
-	n, err := fmt.Sscanf(s, "[%d]", &count)
+	count, name := 0, ""
+	n, err := fmt.Sscanf(s, "[%d]%s", &count, &name)
 
-	if err != nil || n != 1 {
+	if err != nil || n != 2 {
 		return nil
 	}
 
 	return &repeatedStruct{
 		typeStr: s,
+		name:    name,
 		count:   count,
 	}
 }
@@ -46,10 +48,11 @@ func writePackedBytes(fldInfo []*parsestruct.FieldInfo, fldPrefix string, addInd
 	fieldIndent := indent
 
 	if rpSt != nil {
+		indexVarName := rpSt.name + "Index"
 		lastDot := strings.LastIndexByte(fldPrefix, '.')
-		fldPrefix = fldPrefix[:lastDot] + "[i]" + fldPrefix[lastDot:]
+		fldPrefix = fldPrefix[:lastDot] + "[" + indexVarName + "]" + fldPrefix[lastDot:]
 
-		fmt.Fprintf(&b, indent+"for i := 0; i < %d; i++ {\n", rpSt.count)
+		fmt.Fprintf(&b, indent+"for %[1]s := 0; %[1]s < %[2]d; %[1]s++ {\n", indexVarName, rpSt.count)
 		fieldIndent = strings.Repeat("\t", 2+addIndent) // strings.Repeat returns optimized value with '\t'
 	}
 
@@ -78,7 +81,7 @@ func writeUnpackedFields(stInfo *parsestruct.StructInfo, baseOffset int64, addIn
 
 	// start struct declaration
 	if nested == "" {
-		startStruct = fmt.Sprintf(indent+"st = %s{\n", stInfo.StructName)
+		startStruct = fmt.Sprintf(indent+"sst = %s{\n", stInfo.StructName)
 		endStruct = indent + "}\n"
 	} else {
 		fieldTypeStr := stInfo.StructName
@@ -94,8 +97,7 @@ func writeUnpackedFields(stInfo *parsestruct.StructInfo, baseOffset int64, addIn
 
 	fieldIndent := strings.Repeat("\t", 3+addIndent)
 
-	rpCount := 1         // for non-array field, it is always one
-	rpOffset := int64(0) // for non-array field, it is always zero
+	rpCount := 1 // for non-array field, it is always one
 
 	var rpLeft, rpRight string // used for enclosing structs in array
 
@@ -110,7 +112,6 @@ func writeUnpackedFields(stInfo *parsestruct.StructInfo, baseOffset int64, addIn
 		if i != 0 {
 			// increment for next offset
 			baseOffset += stInfo.StructSize
-			rpOffset += stInfo.StructSize
 		}
 
 		if rpLeft != "" {
@@ -120,7 +121,7 @@ func writeUnpackedFields(stInfo *parsestruct.StructInfo, baseOffset int64, addIn
 		for _, field := range stInfo.Fields {
 			if field.StructInfo != nil {
 				// nested struct
-				b.WriteString(writeUnpackedFields(field.StructInfo, field.Offset+rpOffset, addIndent+1, field.Name, parseRepeatedStruct(field.Type)))
+				b.WriteString(writeUnpackedFields(field.StructInfo, baseOffset+field.Offset, addIndent+1, field.Name, parseRepeatedStruct(field.Type)))
 			} else {
 				fmt.Fprintf(&b, fieldIndent+packedFieldFormat, field.Name, field.Type, baseOffset+field.Offset)
 			}
@@ -203,7 +204,7 @@ func (g *Generator) writeStructInterface() {
 
 func (g *Generator) writeGenericStructUnpacker() {
 	g.Printf("func ToStruct[P PackedStruct](buf []byte) (P, error) {\n")
-	g.Printf("\tvar st P\n\n\tswitch st := any(st).(type) { // convert to any for type switch\n")
+	g.Printf("\tvar st P\n\n\tswitch sst := any(st).(type) { // convert to any for type switch\n")
 	for _, info := range g.packInfo.StructInfo {
 		if info == nil {
 			fmt.Fprintln(os.Stderr, "struct info has nil")
@@ -212,7 +213,7 @@ func (g *Generator) writeGenericStructUnpacker() {
 
 		g.Printf("\tcase %s:\n", info.StructName)
 
-		g.Printf("\t\tif int(unsafe.Sizeof(st)) != len(buf) {\n")
+		g.Printf("\t\tif int(unsafe.Sizeof(sst)) != len(buf) {\n")
 		g.Printf("\t\t\t return st, fmt.Errorf(\"the size of buffer does not match the size of struct\")\n\t\t\t}\n\n")
 
 		g.buf.WriteString(writeUnpackedFields(info, 0, 0, "", nil))
@@ -231,7 +232,7 @@ func main() {
 	var filename, output string
 
 	flag.StringVar(&filename, "filename", "", "file name to parse")
-	flag.StringVar(&output, "output", "", "output file name; default srcdir/<filename>_gopack.go")
+	flag.StringVar(&output, "output", "", "output file name; default srcdir/<go_filename>_gopack.go")
 
 	flag.Usage = usage
 
@@ -246,7 +247,7 @@ func main() {
 
 	if output == "" {
 		if output = flag.Arg(1); output == "" {
-			output = filename + "_gopack.go"
+			output = strings.TrimSuffix(filename, ".go") + "_gopack.go"
 		}
 	}
 
