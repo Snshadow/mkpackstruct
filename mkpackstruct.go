@@ -81,7 +81,7 @@ func writeUnpackedFields(stInfo *parsestruct.StructInfo, baseOffset int64, addIn
 
 	// start struct declaration
 	if nested == "" {
-		startStruct = fmt.Sprintf(indent+"sst = %s{\n", stInfo.StructName)
+		startStruct = fmt.Sprintf(indent+"result = %s{\n", stInfo.StructName)
 		endStruct = indent + "}\n"
 	} else {
 		fieldTypeStr := stInfo.StructName
@@ -204,7 +204,9 @@ func (g *Generator) writeStructInterface() {
 
 func (g *Generator) writeGenericStructUnpacker() {
 	g.Printf("func ToStruct[P PackedStruct](buf []byte) (P, error) {\n")
-	g.Printf("\tvar st P\n\n\tswitch sst := any(st).(type) { // convert to any for type switch\n")
+	g.Printf("\tvar st P // empty value used for type switch and returning error\n")
+	g.Printf("\tvar result any // empty interface for holding generated struct before assertion\n")
+	g.Printf("\n\tswitch sst := any(st).(type) { // convert to any for type switch\n")
 	for _, info := range g.packInfo.StructInfo {
 		if info == nil {
 			fmt.Fprintln(os.Stderr, "struct info has nil")
@@ -219,7 +221,7 @@ func (g *Generator) writeGenericStructUnpacker() {
 		g.buf.WriteString(writeUnpackedFields(info, 0, 0, "", nil))
 	}
 
-	g.Printf("\t}\n\n\treturn st, nil\n}\n")
+	g.Printf("\t}\n\n\treturn result.(P), nil\n}\n")
 }
 
 func usage() {
