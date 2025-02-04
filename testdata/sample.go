@@ -25,21 +25,18 @@ type TestStruct struct {
 	EmbedStruct
 	Field11      [7]uint16
 	NestedStruct struct {
-		NestedField  uint32
-		NestedField2 [9]byte
-		NestedField3 *uintptr
-		NestedField4 uint64
+		NestedField1 [1]byte
+		NestedField2 *uintptr
 	}
 }
 
 type InnerStruct struct {
 	InnerField1 [7]uint8
-	InnerField2 *uint32
-	InnerField3 [2]*unsafe.Pointer
-	InnerField4 uint64
-	InnerField5 [4]uint16
-	InnerField6 [2]RepeatedStruct
-	InnerField7 uintptr
+	InnerField2 **uint32
+	InnerField3 
+	InnerField4 map[string]any
+	InnerField5 [2]RepeatedStruct
+	InnerField6 uintptr
 }
 
 type EmbedStruct struct {
@@ -51,7 +48,7 @@ type EmbedStruct struct {
 
 type RepeatedStruct struct {
 	RepeatedField1 [9]uint8
-	RepeatedField2 uint64
+	RepeatedField2 chan error
 	RepeatedField3 []uint32
 	RepeatedField4 *unsafe.Pointer
 }

@@ -246,6 +246,30 @@ func (g *Generator) writeGenericStructUnpacker() {
 	g.Printf("\t}\n\n\treturn result.(P), nil\n}\n")
 }
 
+// main go file generator function
+func mkPackStruct(filename, output string) error {
+	info, err := parsestruct.GetPackInfo(filename)
+	if err != nil {
+		return err
+	}
+
+	g := &Generator{
+		packInfo: info,
+	}
+
+	g.writeHeader()
+	g.writeStructPackerFunctions()
+	g.writeStructInterface()
+	g.writeGetPackedSize()
+	g.writeGenericStructUnpacker()
+
+	if err = os.WriteFile(output, g.format(), 0644); err != nil {
+		return fmt.Errorf("writing output: %v", err)
+	}
+
+	return nil
+}
+
 func usage() {
 	fmt.Fprintf(flag.CommandLine.Output(), "mkpackstruct parses a go file and writes methods for packing structs into bytes buffer and vice versa.\nFor more information, see \"github.com/Snshadow/mkpackstruct\"\n\n")
 
@@ -275,24 +299,8 @@ func main() {
 		}
 	}
 
-	info, err := parsestruct.GetPackInfo(filename)
-	if err != nil {
+	if err := mkPackStruct(filename, output); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-
-	g := &Generator{
-		packInfo: info,
-	}
-
-	g.writeHeader()
-	g.writeStructPackerFunctions()
-	g.writeStructInterface()
-	g.writeGetPackedSize()
-	g.writeGenericStructUnpacker()
-
-	if err = os.WriteFile(output, g.format(), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "writing output: %v\n", err)
 		os.Exit(2)
 	}
 }

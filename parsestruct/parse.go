@@ -55,9 +55,20 @@ func getTypeName(t types.Type) string {
 		return "[]" + getTypeName(tt.Elem())
 	case *types.Pointer:
 		return "*" + getTypeName(tt.Elem())
-	default:
-		return t.String()
+	case *types.Chan:
+		switch tt.Dir() {
+		case types.SendOnly:
+			return "chan<- " + getTypeName(tt.Elem())
+		case types.RecvOnly:
+			return "<-chan " + getTypeName(tt.Elem())
+		case types.SendRecv:
+			return "chan " + getTypeName(tt.Elem())
+		}
+	case *types.Map:
+		return "map[" + getTypeName(tt.Key()) + "]" + getTypeName(tt.Elem())
 	}
+
+	return t.String()
 }
 
 // getStructInfo returns an error if a struct contains go specific type(slice,
