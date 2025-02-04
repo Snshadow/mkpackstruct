@@ -190,23 +190,45 @@ func (g *Generator) writeHeader() {
 func (g *Generator) writeStructPackerFunctions() {
 	for _, info := range g.packInfo.StructInfo {
 		g.Printf("func (s %s) ToPackedByte() []byte {\n", info.StructName)
-		g.Printf("\tvar b bytes.Buffer\n\n")
+		g.buf.WriteString("\tvar b bytes.Buffer\n\n")
 
 		g.buf.WriteString(writePackedBytes(info.Fields, "s.", 0, nil))
 
-		g.Printf("\n\treturn b.Bytes()\n}\n\n")
+		g.buf.WriteString("\n\treturn b.Bytes()\n}\n\n")
 	}
 }
 
+// write an interface representing struct to be used with packing
 func (g *Generator) writeStructInterface() {
-	g.Printf("type PackedStruct interface {\n\tToPackedByte() []byte\n}\n")
+	g.buf.WriteString("type PackedStruct interface {\n\t")
+
+	for i, st := range g.packInfo.StructInfo {
+		g.buf.WriteString(st.StructName)
+
+		if i+1 != len(g.packInfo.StructInfo) {
+			g.buf.WriteString(" | ")
+		}
+	}
+
+	g.buf.WriteString("}\n")
+}
+
+// write a function to get packed size for comparision
+func (g *Generator) writeGetPackedSize() {
+	g.buf.WriteString("func getPackedSize[P PackedStruct](st P) int {\tswitch any(st).(type) {\n")
+
+	for _, info := range g.packInfo.StructInfo {
+		g.Printf("\tcase %s:\n\t\treturn %d\n", info.StructName, info.StructSize)
+	}
+
+	g.buf.WriteString("\t}\n\n\treturn 0 // can't happen\n}\n\n")
 }
 
 func (g *Generator) writeGenericStructUnpacker() {
-	g.Printf("func ToStruct[P PackedStruct](buf []byte) (P, error) {\n")
-	g.Printf("\tvar st P // empty value used for type switch and returning error\n")
-	g.Printf("\tvar result any // empty interface for holding generated struct before assertion\n")
-	g.Printf("\n\tswitch sst := any(st).(type) { // convert to any for type switch\n")
+	g.buf.WriteString("func ToStruct[P PackedStruct](buf []byte) (P, error) {\n")
+	g.buf.WriteString("\tvar st P // empty value used for type switch and returning error\n")
+	g.buf.WriteString("\tvar result any // empty interface for holding generated struct before assertion\n")
+	g.buf.WriteString("\n\tswitch sst := any(st).(type) { // convert to any for type switch\n")
 	for _, info := range g.packInfo.StructInfo {
 		if info == nil {
 			fmt.Fprintln(os.Stderr, "struct info has nil")
@@ -215,8 +237,8 @@ func (g *Generator) writeGenericStructUnpacker() {
 
 		g.Printf("\tcase %s:\n", info.StructName)
 
-		g.Printf("\t\tif int(unsafe.Sizeof(sst)) != len(buf) {\n")
-		g.Printf("\t\t\t return st, fmt.Errorf(\"the size of buffer does not match the size of struct\")\n\t\t\t}\n\n")
+		g.buf.WriteString("\t\tif getPackedSize(sst) != len(buf) {\n")
+		g.buf.WriteString("\t\t\t return st, fmt.Errorf(\"the size of buffer does not match the size of struct\")\n\t\t\t}\n\n")
 
 		g.buf.WriteString(writeUnpackedFields(info, 0, 0, "", nil))
 	}
@@ -266,6 +288,7 @@ func main() {
 	g.writeHeader()
 	g.writeStructPackerFunctions()
 	g.writeStructInterface()
+	g.writeGetPackedSize()
 	g.writeGenericStructUnpacker()
 
 	if err = os.WriteFile(output, g.format(), 0644); err != nil {

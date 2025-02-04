@@ -1,5 +1,13 @@
 // sizes implements "go/types".Sizes with some change in code referenced from
-// std package "go/types" which is licensed under BSD-3-Clause.
+// std package "go/types" which is licensed under BSD-3-Clause, which is located at
+// https://cs.opensource.google/go/go/+/master:src/cmd/compile/internal/types2/sizes.go
+//
+// -- original disclaimer --
+// 	Copyright 2013 The Go Authors. All rights reserved.
+// 	Use of this source code is governed by a BSD-style
+// 	license that can be found in the LICENSE file.
+//
+
 package sizes
 
 import (
