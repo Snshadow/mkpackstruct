@@ -33,8 +33,8 @@ type TestStruct struct {
 type InnerStruct struct {
 	InnerField1 [7]uint8
 	InnerField2 **uint32
-	InnerField3 
-	InnerField4 map[string]any
+	InnerField3 chan NamedUint32
+	InnerField4 map[string]NamedUint32_2
 	InnerField5 [2]RepeatedStruct
 	InnerField6 uintptr
 }
@@ -48,7 +48,7 @@ type EmbedStruct struct {
 
 type RepeatedStruct struct {
 	RepeatedField1 [9]uint8
-	RepeatedField2 chan error
+	RepeatedField2 <-chan error
 	RepeatedField3 []uint32
 	RepeatedField4 *unsafe.Pointer
 }
