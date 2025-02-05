@@ -123,9 +123,7 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 }
 
 // GetPackInfo returns required information including package name and
-// struct names and informations from a file, if any struct contains go
-// specific type(slice, map, chan, interface, function signature) which
-// can't be directly converted to raw bytes, it will return an error
+// struct names and informations from a file
 func GetPackInfo(filename string) (GoPackInfo, error) {
 	fset := token.NewFileSet()
 

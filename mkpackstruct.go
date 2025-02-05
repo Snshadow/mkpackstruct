@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/Snshadow/mkpackstruct/parsestruct"
@@ -15,14 +16,14 @@ import (
 func usage() {
 	fmt.Fprintf(flag.CommandLine.Output(), "mkpackstruct parses a go file and writes methods for packing structs into bytes buffer and vice versa.\nFor more information, see \"github.com/Snshadow/mkpackstruct\"\n\n")
 
-	flag.Usage()
+	flag.PrintDefaults()
 }
 
 func main() {
 	var filename, output string
 
 	flag.StringVar(&filename, "filename", "", "file name to parse")
-	flag.StringVar(&output, "output", "", "output file name; default srcdir/<go_filename>_gopack.go")
+	flag.StringVar(&output, "output", "", "output file name; default srcdir/<go_filename>_gopack_${GOARCH}.go")
 
 	flag.Usage = usage
 
@@ -37,7 +38,7 @@ func main() {
 
 	if output == "" {
 		if output = flag.Arg(1); output == "" {
-			output = strings.TrimSuffix(filename, ".go") + "_gopack.go"
+			output = fmt.Sprintf("%s_gopack_%s.go", strings.TrimSuffix(filename, ".go"), runtime.GOARCH)
 		}
 	}
 
