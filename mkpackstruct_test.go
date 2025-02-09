@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 	"reflect"
 	"testing"
@@ -16,7 +15,7 @@ package testdata
 
 import ()
 
-func (s TestStruct) ToPackedByte() []byte {
+func (s *TestStruct) ToPackedByte() []byte {
 	panic("STUB")
 }
 
@@ -31,7 +30,6 @@ func ToStruct[P PackedStruct](buf []byte) (P, error) {
 )
 
 func TestMain(t *testing.M) {
-	log.SetFlags(0)
 	code := t.Run()
 
 	_ = os.WriteFile("testdata/sample_gopack.go", []byte(sampleStub), 0644)

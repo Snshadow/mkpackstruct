@@ -4,7 +4,7 @@ package testdata
 
 import ()
 
-func (s TestStruct) ToPackedByte() []byte {
+func (s *TestStruct) ToPackedByte() []byte {
 	panic("STUB")
 }
 
