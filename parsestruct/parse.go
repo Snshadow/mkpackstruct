@@ -2,16 +2,20 @@
 package parsestruct
 
 import (
+	"fmt"
 	"go/ast"
 	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/Snshadow/mkpackstruct/internal/sizes"
 )
+
+var	stripRe *regexp.Regexp // regex for stripping parsed package name
 
 type GoPackInfo struct {
 	PackageName string
@@ -37,15 +41,30 @@ type StructInfo struct {
 func cleanStructString(s string) string {
 	parts := strings.Split(s, " ")
 	for i, part := range parts {
-		if idx := strings.LastIndex(part, "."); idx >= 0 {
-			parts[i] = part[idx+1:]
+		if stripRe.MatchString(part) {
+			if idx := strings.LastIndex(part, "."); idx >= 0 {
+				parts[i] = part[idx+1:]
+			}
 		}
 	}
 	return strings.Join(parts, " ")
 }
 
+// pkgQualifier returns just the package name for imported types
+func pkgQualifier(p *types.Package) string {
+	if p == nil {
+		return ""
+	}
+	return p.Name()
+}
+
 // getTypeName returns type name without package name prefix
 func getTypeName(t types.Type) string {
+	str := types.TypeString(t, pkgQualifier)
+	if !stripRe.MatchString(str) { // return imported type from external package as is
+		return str
+	} 
+
 	switch tt := t.(type) {
 	case *types.Named:
 		return tt.Obj().Name()
@@ -68,7 +87,7 @@ func getTypeName(t types.Type) string {
 		return "map[" + getTypeName(tt.Key()) + "]" + getTypeName(tt.Elem())
 	}
 
-	return t.String()
+	return str
 }
 
 // getStructInfo returns an error if a struct contains go specific type(slice,
@@ -135,7 +154,7 @@ func GetPackInfo(filename string) (GoPackInfo, error) {
 	sizes := &sizes.PackedSizes{}
 
 	conf := types.Config{
-		Importer: importer.Default(),
+		Importer: importer.ForCompiler(fset, "source", nil),
 		Sizes:    sizes,
 	}
 
@@ -143,6 +162,12 @@ func GetPackInfo(filename string) (GoPackInfo, error) {
 	if err != nil {
 		return GoPackInfo{}, err
 	}
+	
+	re, err := regexp.Compile(fmt.Sprintf(`[^\w]*\b%s\.`, f.Name.Name))
+	if err != nil {
+		return GoPackInfo{}, err
+	}
+	stripRe = re
 
 	structInfos := make([]*StructInfo, 0)
 

@@ -159,8 +159,8 @@ func writeImportHeader(pkgs []*types.Package) string {
 	imported := []string{"bytes", "fmt", "unsafe"} // used for conversion between struct and buffer
 
 	for _, pkg := range pkgs {
-		if !slices.Contains(imported, pkg.Name()) {
-			imported = append(imported, pkg.Name())
+		if !slices.Contains(imported, pkg.Path()) {
+			imported = append(imported, pkg.Path())
 		}
 	}
 	slices.Sort(imported)
