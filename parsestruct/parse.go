@@ -50,17 +50,14 @@ func cleanStructString(s string) string {
 	return strings.Join(parts, " ")
 }
 
-// pkgQualifier returns just the package name for imported types
-func pkgQualifier(p *types.Package) string {
-	if p == nil {
-		return ""
-	}
-	return p.Name()
-}
-
 // getTypeName returns type name without package name prefix
 func getTypeName(t types.Type) string {
-	str := types.TypeString(t, pkgQualifier)
+	str := types.TypeString(t, func(p *types.Package) string {
+		if p == nil {
+			return ""
+		}
+		return p.Name()
+	})
 	if !stripRe.MatchString(str) { // return imported type from external package as is
 		return str
 	} 
