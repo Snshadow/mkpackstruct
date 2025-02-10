@@ -15,7 +15,7 @@ func (s *SomeStruct) ToPackedByte() []byte {
 
 which returns byte slice which has serialized struct data without any padding.
 
-It also creates generic function `ToStruct[P PackedStruct](st P) (P, error)` for unpacking structs from serialized byte slice by create type union for structs in the specified go file,
+It also creates generic function `ToStruct[P PackedStruct](st P) (P, error)` for unpacking structs from serialized byte slice by creating type union for structs in the specified go file,
 
 ```go
 func ToStruct[P PackedStruct](buf []byte) (P, error) {

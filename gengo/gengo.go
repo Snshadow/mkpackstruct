@@ -186,7 +186,7 @@ func (g *Generator) writeHeader() {
 
 func (g *Generator) writeStructPackerFunctions() {
 	for _, info := range g.packInfo.StructInfo {
-		g.Printf("func (s %s) ToPackedByte() []byte {\n", info.StructName)
+		g.Printf("func (s *%s) ToPackedByte() []byte {\n", info.StructName)
 		g.buf.WriteString("\tvar b bytes.Buffer\n\n")
 
 		g.buf.WriteString(writePackedBytes(info.Fields, "s.", 0, nil))
