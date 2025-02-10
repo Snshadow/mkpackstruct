@@ -39,7 +39,7 @@ note that this function returns an error if the size of the byte slice does not 
 go run github.com/Snshadow/mkpackstruct <go_filename> <output>
 ```
 
-If output is not specified, file will be written at `srcdir/<go_filename>_gopack_${GOARCH}.go` by default.
+If output is not specified, generated file will be written at `srcdir/<go_filename>_packstruct_${GOARCH}.go` by default. If such build constraint is not needed, specify the output path like `<go_filename>_packstruct.go`. Set `GOARCH` value to create function for wanted architecture.
 
 ---
 
