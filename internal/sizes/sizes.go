@@ -22,7 +22,7 @@ const (
 	maxAlign = int64(1) // always one without padding
 )
 
-// PackedSizes is similiar to StdSize from "go/types", except that Alignof() always returns maxAlign(1)
+// PackedSizes is similar to StdSize from "go/types", except that Alignof() always returns maxAlign(1)
 //
 // *PackedSizes implements "go/types".Sizes.
 type PackedSizes struct{}
@@ -124,8 +124,8 @@ func (s *PackedSizes) Sizeof(T types.Type) int64 {
 		}
 		return offs + size // may overflow to < 0 which is ok
 	case *types.Interface:
-		// Type parameters lead to variable sizes/alignments;
-		// StdSizes.Sizeof won't be called for them.
+		// type parameters lead to variable sizes/alignments;
+		// stdSizes.Sizeof won't be called for them;
 		assert(!isTypeParam(T))
 		return wordSize * 2
 	case *types.TypeParam, *types.Union:
@@ -138,7 +138,7 @@ func (s *PackedSizes) Sizeof(T types.Type) int64 {
 
 // isTyped reports whether t is typed; i.e., not an untyped
 // constant or boolean.
-// Safe to call from types that are not fully set up.
+// safe to call from types that are not fully set up
 func isTyped(t types.Type) bool {
 	// Alias and named types cannot denote untyped types
 	// so there's no need to call Unalias or under, below.
@@ -157,7 +157,7 @@ func align(x, a int64) int64 {
 func assert(p bool) {
 	if !p {
 		msg := "assertion failed"
-		// Include information about the assertion location. Due to panic recovery,
+		// include information about the assertion location, due to panic recovery,
 		// this location is otherwise buried in the middle of the panicking stack.
 		if _, file, line, ok := runtime.Caller(1); ok {
 			msg = fmt.Sprintf("%s:%d: %s", file, line, msg)

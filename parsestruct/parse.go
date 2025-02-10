@@ -8,6 +8,8 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,7 +17,7 @@ import (
 	"github.com/Snshadow/mkpackstruct/internal/sizes"
 )
 
-var	stripRe *regexp.Regexp // regex for stripping parsed package name
+var stripRe *regexp.Regexp // regex for stripping parsed package name
 
 type GoPackInfo struct {
 	PackageName string
@@ -60,7 +62,7 @@ func getTypeName(t types.Type) string {
 	})
 	if !stripRe.MatchString(str) { // return imported type from external package as is
 		return str
-	} 
+	}
 
 	switch tt := t.(type) {
 	case *types.Named:
@@ -143,9 +145,36 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 func GetPackInfo(filename string) (GoPackInfo, error) {
 	fset := token.NewFileSet()
 
-	f, err := parser.ParseFile(fset, filename, nil, parser.SkipObjectResolution)
+	// parse the target file first to get its AST
+	targetFile, err := parser.ParseFile(fset, filename, nil, parser.SkipObjectResolution)
 	if err != nil {
 		return GoPackInfo{}, err
+	}
+
+	// get the directory of the target file
+	dir := filepath.Dir(filename)
+
+	// parse all .go files in the same directory, excluding generated files
+	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
+		return !strings.Contains(fi.Name(), "_packstruct")
+	}, parser.SkipObjectResolution)
+	if err != nil {
+		return GoPackInfo{}, err
+	}
+
+	// find the package containing the target file
+	var files []*ast.File
+	for _, pkg := range pkgs {
+		if pkg.Name == targetFile.Name.Name {
+			for _, f := range pkg.Files {
+				files = append(files, f)
+			}
+			break
+		}
+	}
+
+	if len(files) == 0 {
+		return GoPackInfo{}, fmt.Errorf("no files found in package %s", targetFile.Name.Name)
 	}
 
 	sizes := &sizes.PackedSizes{}
@@ -155,12 +184,12 @@ func GetPackInfo(filename string) (GoPackInfo, error) {
 		Sizes:    sizes,
 	}
 
-	pkg, err := conf.Check(f.Name.Name, fset, []*ast.File{f}, nil)
+	pkg, err := conf.Check(targetFile.Name.Name, fset, files, nil)
 	if err != nil {
 		return GoPackInfo{}, err
 	}
-	
-	re, err := regexp.Compile(fmt.Sprintf(`[^\w]*\b%s\.`, f.Name.Name))
+
+	re, err := regexp.Compile(fmt.Sprintf(`[^\w]*\b%s\.`, targetFile.Name.Name))
 	if err != nil {
 		return GoPackInfo{}, err
 	}
@@ -168,23 +197,37 @@ func GetPackInfo(filename string) (GoPackInfo, error) {
 
 	structInfos := make([]*StructInfo, 0)
 
-	scope := pkg.Scope()
+	// get position info for the target file to filter structs
+	targetFilePos := fset.File(targetFile.Pos())
+	if targetFilePos == nil {
+		return GoPackInfo{}, fmt.Errorf("could not get position info for target file")
+	}
+	targetFilename := filepath.ToSlash(targetFilePos.Name())
 
+	scope := pkg.Scope()
 	for _, name := range scope.Names() {
 		obj := scope.Lookup(name)
 
 		if typeName, ok := obj.(*types.TypeName); ok {
 			if st, ok := typeName.Type().Underlying().(*types.Struct); ok {
-				stInfo := getStructInfo(st, sizes, typeName.Name())
-
-				stInfo.StructName = name
-				structInfos = append(structInfos, &stInfo)
+				// only include structs defined in the target file
+				if obj.Pos() != token.NoPos {
+					posInfo := fset.File(obj.Pos())
+					if posInfo != nil {
+						posName := filepath.ToSlash(posInfo.Name())
+						if posName == targetFilename {
+							stInfo := getStructInfo(st, sizes, typeName.Name())
+							stInfo.StructName = name
+							structInfos = append(structInfos, &stInfo)
+						}
+					}
+				}
 			}
 		}
 	}
 
 	return GoPackInfo{
-		PackageName: f.Name.Name,
+		PackageName: targetFile.Name.Name,
 		Imports:     pkg.Imports(),
 		StructInfo:  structInfos,
 	}, nil

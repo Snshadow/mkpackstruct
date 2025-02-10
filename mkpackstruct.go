@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Snshadow/mkpackstruct/parsestruct"
 	"github.com/Snshadow/mkpackstruct/gengo"
+	"github.com/Snshadow/mkpackstruct/parsestruct"
 )
 
 func usage() {
@@ -38,7 +38,7 @@ func main() {
 
 	if output == "" {
 		if output = flag.Arg(1); output == "" {
-			output = fmt.Sprintf("%s_gopack_%s.go", strings.TrimSuffix(filename, ".go"), runtime.GOARCH)
+			output = fmt.Sprintf("%s_packstruct_%s.go", strings.TrimSuffix(filename, ".go"), runtime.GOARCH)
 		}
 	}
 

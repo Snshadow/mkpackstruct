@@ -32,7 +32,7 @@ func ToStruct[P PackedStruct](buf []byte) (P, error) {
 func TestMain(t *testing.M) {
 	code := t.Run()
 
-	_ = os.WriteFile("testdata/sample_gopack.go", []byte(sampleStub), 0644)
+	_ = os.WriteFile("testdata/sample_packstruct.go", []byte(sampleStub), 0644)
 
     os.Exit(code)
 }
