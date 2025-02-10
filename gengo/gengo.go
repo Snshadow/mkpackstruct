@@ -219,7 +219,7 @@ func collectUsedImports(info parsestruct.GoPackInfo) []string {
 					checkType(field.Type)
 				}
 
-				// if it's a nested struct, analyze struct its fields
+				// if it's a nested struct, analyze struct and its fields
 				if field.StructInfo != nil {
 					checkType(field.StructInfo.StructName)
 					analyzeFields(field.StructInfo.Fields)
