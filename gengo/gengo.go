@@ -170,12 +170,10 @@ func collectUsedImports(info parsestruct.GoPackInfo) []string {
 	checkType := func(typeName string) {
 		for _, pkg := range info.Imports {
 			pkgPath := pkg.Path()
-			// extract just the last part of the package path for comparison
-			parts := strings.Split(pkgPath, "/")
-			pkgName := parts[len(parts)-1]
+			pkgName := pkg.Name()
 
 			// look for exact package usage patterns
-			patterns := []string{
+			patterns := [...]string{
 				pkgName + ".",             // import declaration
 				"*" + pkgName + ".",       // pointer
 				"[]" + pkgName + ".",      // slice 
@@ -217,10 +215,13 @@ func collectUsedImports(info parsestruct.GoPackInfo) []string {
 		analyzeFields = func(fields []*parsestruct.FieldInfo) {
 			for _, field := range fields {
 				// check the field's type
-				checkType(field.Type)
+				if field.Type != "" {
+					checkType(field.Type)
+				}
 
-				// if it's a nested struct, analyze its fields
+				// if it's a nested struct, analyze struct its fields
 				if field.StructInfo != nil {
+					checkType(field.StructInfo.StructName)
 					analyzeFields(field.StructInfo.Fields)
 				}
 			}
