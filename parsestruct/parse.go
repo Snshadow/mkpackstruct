@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -39,7 +40,7 @@ type StructInfo struct {
 	StructSize int64 // types.Sizes interface returns int64
 }
 
-// cleanStructString removes package name prefix from field type from nameless struct type string
+// cleanStructString removes package name prefix from field type from nameless struct type string.
 func cleanStructString(s string) string {
 	parts := strings.Split(s, " ")
 	for i, part := range parts {
@@ -90,7 +91,7 @@ func getTypeName(t types.Type) string {
 }
 
 // getStructInfo returns an error if a struct contains go specific type(slice,
-// map, chan, interface, function signature) as a field or in an array
+// map, chan, interface, function signature) as a field or in an array.
 func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo {
 	var stInfo StructInfo
 
@@ -141,36 +142,53 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 }
 
 // GetPackInfo returns required information including package name and
-// struct names and informations from a file
-func GetPackInfo(filename string) (GoPackInfo, error) {
+// struct names and informations from a file by parsing files in
+// searchFiles or all file in the same directory if not specified.
+func GetPackInfo(filename string, parsedFiles ...string) (GoPackInfo, error) {
 	fset := token.NewFileSet()
 
-	// parse the target file first to get its AST
 	targetFile, err := parser.ParseFile(fset, filename, nil, parser.SkipObjectResolution)
 	if err != nil {
 		return GoPackInfo{}, err
 	}
 
-	// get the directory of the target file
-	dir := filepath.Dir(filename)
+	// get base name of parsed files
+	for i, name := range parsedFiles {
+		parsedFiles[i] = filepath.Base(name)
+	}
 
-	// parse all .go files in the same directory, excluding generated files
-	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
-		return !strings.Contains(fi.Name(), "_packstruct")
-	}, parser.SkipObjectResolution)
-	if err != nil {
-		return GoPackInfo{}, err
+	// optimize single file parsing
+	var singleFile bool
+
+	if len(parsedFiles) == 1 && slices.ContainsFunc(parsedFiles, func(parsed string) bool {
+		return filepath.Base(filename) == parsed
+	}) {
+		singleFile = true
 	}
 
 	// find the package containing the target file
 	var files []*ast.File
-	for _, pkg := range pkgs {
-		if pkg.Name == targetFile.Name.Name {
-			for _, f := range pkg.Files {
-				files = append(files, f)
+
+	if !singleFile {
+		// parse .go files in the same directory, including specified files and excluding generated files
+		pkgs, err := parser.ParseDir(fset, filepath.Dir(filename), func(fi os.FileInfo) bool {
+			if len(parsedFiles) != 0 {
+				if !slices.Contains(parsedFiles, fi.Name()) {
+					return false
+				}
 			}
-			break
+			return !strings.Contains(fi.Name(), "_packstruct")
+		}, parser.SkipObjectResolution)
+		if err != nil {
+			return GoPackInfo{}, err
 		}
+
+		for _, f := range pkgs[targetFile.Name.Name].Files {
+			files = append(files, f)
+		}
+	} else {
+		// parse single target file
+		files = append(files, targetFile)
 	}
 
 	if len(files) == 0 {

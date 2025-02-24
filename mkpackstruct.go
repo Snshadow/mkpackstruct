@@ -20,9 +20,10 @@ func usage() {
 }
 
 func main() {
-	var filename, output string
+	var filename, parsedFiles, output string
 
-	flag.StringVar(&filename, "filename", "", "file name to parse")
+	flag.StringVar(&filename, "filename", "", "name of file used to create packed struct")
+	flag.StringVar(&parsedFiles, "parsed", "", "files to be parsed within a package, separated with commas, if empty, parse all file in the same directory")
 	flag.StringVar(&output, "output", "", "output file name; default srcdir/<go_filename>_gopack_${GOARCH}.go")
 
 	flag.Usage = usage
@@ -42,7 +43,12 @@ func main() {
 		}
 	}
 
-	packInfo, err := parsestruct.GetPackInfo(filename)
+	var resolvedParsed []string
+	if parsedFiles != "" {
+		resolvedParsed = strings.Split(parsedFiles, ",")
+	}
+
+	packInfo, err := parsestruct.GetPackInfo(filename, resolvedParsed...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse source file: %v\n", err)
 		os.Exit(2)
