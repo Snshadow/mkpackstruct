@@ -18,14 +18,25 @@ import (
 )
 
 const (
-	wordSize = int64(unsafe.Sizeof(uintptr(0)))
 	maxAlign = int64(1) // always one without padding
 )
 
 // PackedSizes is similar to StdSize from "go/types", except that Alignof() always returns maxAlign(1)
 //
-// *PackedSizes implements "go/types".Sizes.
-type PackedSizes struct{}
+// *PackedSizes implements [types.Sizes].
+type PackedSizes struct {
+	wordSize int64
+}
+
+func NewPackedSizes(wordSize int64) *PackedSizes {
+	if wordSize == 0 {
+		wordSize = int64(unsafe.Sizeof(uintptr(0)))
+	}
+
+	return &PackedSizes{
+		wordSize: wordSize,
+	}
+}
 
 func (s *PackedSizes) Alignof(T types.Type) (result int64) {
 	return maxAlign // always 1
@@ -80,7 +91,7 @@ func (s *PackedSizes) Sizeof(T types.Type) int64 {
 			}
 		}
 		if k == types.String {
-			return wordSize * 2
+			return s.wordSize * 2
 		}
 	case *types.Array:
 		n := t.Len()
@@ -110,7 +121,7 @@ func (s *PackedSizes) Sizeof(T types.Type) int64 {
 		}
 		return ea*n1 + esize // may still overflow to < 0 which is ok
 	case *types.Slice:
-		return wordSize * 3
+		return s.wordSize * 3
 	case *types.Struct:
 		n := t.NumFields()
 		if n == 0 {
@@ -127,11 +138,11 @@ func (s *PackedSizes) Sizeof(T types.Type) int64 {
 		// type parameters lead to variable sizes/alignments;
 		// stdSizes.Sizeof won't be called for them;
 		assert(!isTypeParam(T))
-		return wordSize * 2
+		return s.wordSize * 2
 	case *types.TypeParam, *types.Union:
 		panic("unreachable")
 	}
-	return wordSize // catch-all
+	return s.wordSize // catch-all
 }
 
 // ---- copied unexported functions from "go/types" ----

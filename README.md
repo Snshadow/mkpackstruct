@@ -1,6 +1,6 @@
 # mkpackstruct
 
-mkpackstruct generates go file for packing struct, which can be useful for using structs with [packed attribute](https://gcc.gnu.org/onlinedocs/gcc/Common-Type-Attributes.html#index-packed-type-attribute) from gcc or with [pack pragma](https://learn.microsoft.com/en-us/cpp/preprocessor/pack)(especially with `#pragma pack(1)`) from MSVC. Instead of using `reflect` package to create packed struct at runtime, this repository seeks to create functions for packing in advance, to reduce runtime overheads.
+mkpackstruct generates go file for packing struct, which can be useful for using structs with [packed attribute](https://gcc.gnu.org/onlinedocs/gcc/Common-Type-Attributes.html#index-packed-type-attribute) from gcc or with [pack pragma](https://learn.microsoft.com/en-us/cpp/preprocessor/pack)(particularly with `#pragma pack(1)`) from MSVC. Instead of using `reflect` package to create packed struct at runtime, this repository seeks to create functions for packing in advance, to reduce runtime overheads.
 
 ## Features
 
@@ -59,7 +59,7 @@ import (
 )
 ```
 
-_need_pack.go_
+_need\_pack.go_
 
 ```go
 //go:generate go run github.com/Snshadow/mkpackstruct $GOFILE

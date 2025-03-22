@@ -90,8 +90,7 @@ func getTypeName(t types.Type) string {
 	return str
 }
 
-// getStructInfo returns an error if a struct contains go specific type(slice,
-// map, chan, interface, function signature) as a field or in an array.
+// getStructInfo returns infomation of a struct and its fields.
 func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo {
 	var stInfo StructInfo
 
@@ -144,7 +143,7 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 // GetPackInfo returns required information including package name and
 // struct names and informations from a file by parsing files in
 // searchFiles or all file in the same directory if not specified.
-func GetPackInfo(filename string, parsedFiles ...string) (GoPackInfo, error) {
+func GetPackInfo(filename string, wordSize int64, parsedFiles ...string) (GoPackInfo, error) {
 	fset := token.NewFileSet()
 
 	targetFile, err := parser.ParseFile(fset, filename, nil, parser.SkipObjectResolution)
@@ -195,7 +194,7 @@ func GetPackInfo(filename string, parsedFiles ...string) (GoPackInfo, error) {
 		return GoPackInfo{}, fmt.Errorf("no files found in package %s", targetFile.Name.Name)
 	}
 
-	sizes := &sizes.PackedSizes{}
+	sizes := sizes.NewPackedSizes(wordSize)
 
 	conf := types.Config{
 		Importer: importer.ForCompiler(fset, "source", nil),

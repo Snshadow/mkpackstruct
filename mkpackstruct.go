@@ -21,10 +21,12 @@ func usage() {
 
 func main() {
 	var filename, parsedFiles, output string
+	var wordSize int64
 
 	flag.StringVar(&filename, "filename", "", "name of file used to create packed struct")
 	flag.StringVar(&parsedFiles, "parsed", "", "files to be parsed within a package, separated with commas, if empty, parse all file in the same directory")
 	flag.StringVar(&output, "output", "", "output file name; default srcdir/<go_filename>_gopack_${GOARCH}.go")
+	flag.Int64Var(&wordSize, "word-size", 0, "word size to be used for parsing structs, default to word size of a running architecture")
 
 	flag.Usage = usage
 
@@ -48,7 +50,7 @@ func main() {
 		resolvedParsed = strings.Split(parsedFiles, ",")
 	}
 
-	packInfo, err := parsestruct.GetPackInfo(filename, resolvedParsed...)
+	packInfo, err := parsestruct.GetPackInfo(filename, wordSize, resolvedParsed...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse source file: %v\n", err)
 		os.Exit(2)
