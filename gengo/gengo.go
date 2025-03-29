@@ -145,7 +145,7 @@ func collectUsedImports(info parsestruct.GoPackInfo) []string {
 	// needed for buffer operations in ToPackedByte
 	imported["bytes"] = struct{}{}
 	// needed for error handling in ToStruct
-	imported["fmt"] = struct{}{}
+	imported["errors"] = struct{}{}
 
 	// helper function to check if a type uses a package
 	checkType := func(typeName string) {
@@ -311,7 +311,7 @@ func (g *Generator) writeGenericStructUnpacker() {
 		g.Printf("\tcase %s:\n", info.StructName)
 
 		g.buf.WriteString("\t\tif GetPackedSize(sst) != len(buf) {\n")
-		g.buf.WriteString("\t\t\t return st, fmt.Errorf(\"the size of buffer does not match the size of struct\")\n\t\t\t}\n\n")
+		g.buf.WriteString("\t\t\t return st, errors.New(\"the size of buffer does not match the size of struct\")\n\t\t\t}\n\n")
 
 		g.buf.WriteString(writeUnpackedFields(info, 0, 0, "", nil))
 	}
