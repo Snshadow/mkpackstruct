@@ -11,6 +11,7 @@ type NamedUint32_2 NamedUint32
 
 type AliasUintptr = uintptr
 
+//mkpackstruct:pack(push, 1)
 type InnerStruct struct {
 	InnerField1 [7]uint8
 	InnerField2 **uint32
@@ -26,6 +27,7 @@ type EmbedStruct struct {
 	EmbedField3 [1]uint16
 	EmbedField4 *uintptr
 }
+//mkpackstruct:pack(pop)
 
 type RepeatedStruct struct {
 	RepeatedField1 [9]uint8

@@ -31,6 +31,14 @@ func (s *TestBackTo2Struct) ToPackedByte() []byte {
 	panic("STUB")
 }
 
+func (s *TestPack4NoPushStruct) ToPackedByte() []byte {
+	panic("STUB")
+}
+
+func (s *TestBackTo1Struct) ToPackedByte() []byte {
+	panic("STUB")
+}
+
 func (s *Test8Struct) ToPackedByte() []byte {
 	panic("STUB")
 }
@@ -40,7 +48,7 @@ func (s *Test16Struct) ToPackedByte() []byte {
 }
 
 type PackedStruct interface {
-	TestStruct | Test2Struct | Test4Struct | TestBackTo2Struct | Test8Struct | Test16Struct
+	TestStruct | Test2Struct | Test4Struct | TestBackTo2Struct | TestPack4NoPushStruct | TestBackTo1Struct | Test8Struct | Test16Struct
 }
 
 func ToStruct[P PackedStruct](buf []byte) (P, error) {
@@ -93,7 +101,7 @@ func testStructValues() ([2]testdata.InnerStruct, testdata.EmbedStruct, *uint64)
 		&u64
 }
 
-func TestPackedDefaultAlignment(t *testing.T) {
+func TestPackedPack1Alignment(t *testing.T) {
 	inner, embed, u64 := testStructValues()
 
 	before := testdata.TestStruct{
@@ -102,7 +110,7 @@ func TestPackedDefaultAlignment(t *testing.T) {
 		EmbedStruct: embed,
 		Field10:     u64,
 	}
-	checkRoundTrip(t, before, &before, 409)
+	checkRoundTrip(t, before, &before, 437)
 }
 
 func TestPackedPack2Alignment(t *testing.T) {
@@ -114,7 +122,7 @@ func TestPackedPack2Alignment(t *testing.T) {
 		EmbedStruct: embed,
 		Field10:     u64,
 	}
-	checkRoundTrip(t, before, &before, 412)
+	checkRoundTrip(t, before, &before, 440)
 }
 
 func TestPackedPack4Alignment(t *testing.T) {
@@ -126,7 +134,7 @@ func TestPackedPack4Alignment(t *testing.T) {
 		EmbedStruct: embed,
 		Field10:     u64,
 	}
-	checkRoundTrip(t, before, &before, 420)
+	checkRoundTrip(t, before, &before, 448)
 }
 
 func TestPackedPopBackToPack2Alignment(t *testing.T) {
@@ -138,7 +146,25 @@ func TestPackedPopBackToPack2Alignment(t *testing.T) {
 		EmbedStruct: embed,
 		Field10:     u64,
 	}
-	checkRoundTrip(t, before, &before, 412)
+	checkRoundTrip(t, before, &before, 440)
+}
+
+func TestPackedPlainPack(t *testing.T) {
+	before := testdata.TestPack4NoPushStruct{
+		Field1: 1,
+		Field2: 2,
+		Field3: 3,
+	}
+	checkRoundTrip(t, before, &before, 16)
+}
+
+func TestPackedPopRestore(t *testing.T) {
+	before := testdata.TestBackTo1Struct{
+		Field1: 1,
+		Field2: 2,
+		Field3: 3,
+	}
+	checkRoundTrip(t, before, &before, 10)
 }
 
 func TestPackedPack8Alignment(t *testing.T) {
@@ -150,7 +176,7 @@ func TestPackedPack8Alignment(t *testing.T) {
 		EmbedStruct: embed,
 		Field10:     u64,
 	}
-	checkRoundTrip(t, before, &before, 432)
+	checkRoundTrip(t, before, &before, 456)
 }
 
 func TestPackedPack16Alignment(t *testing.T) {
@@ -162,5 +188,5 @@ func TestPackedPack16Alignment(t *testing.T) {
 		EmbedStruct: embed,
 		Field10:     u64,
 	}
-	checkRoundTrip(t, before, &before, 432)
+	checkRoundTrip(t, before, &before, 456)
 }

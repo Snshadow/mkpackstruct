@@ -4,6 +4,7 @@ import (
 	"unsafe"
 )
 
+//mkpackstruct:pack(1)
 type TestStruct struct {
 	Field1  uint32
 	Field2  [9]uint8
@@ -82,7 +83,20 @@ type TestBackTo2Struct struct {
 		NestedField2 *uintptr
 	}
 }
+
+//mkpackstruct:pack(4)
+type TestPack4NoPushStruct struct {
+	Field1 byte
+	Field2 uint64
+	Field3 byte
+}
 //mkpackstruct:pack(pop)
+
+type TestBackTo1Struct struct {
+	Field1 byte
+	Field2 uint64
+	Field3 byte
+}
 
 //mkpackstruct:pack(push, 8)
 type Test8Struct struct {

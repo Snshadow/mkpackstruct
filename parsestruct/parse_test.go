@@ -30,6 +30,15 @@ func structByName(t *testing.T, info GoPackInfo, name string) *StructInfo {
 	return nil
 }
 
+func hasStruct(info GoPackInfo, name string) bool {
+	for _, st := range info.StructInfo {
+		if st.StructName == name {
+			return true
+		}
+	}
+	return false
+}
+
 func TestPackDirectiveStackAndLayout(t *testing.T) {
 	filename := writeSource(t, `package sample
 
@@ -76,9 +85,8 @@ type BackToDefault struct {
 		t.Fatalf("GetPackInfo: %v", err)
 	}
 
-	defaultSt := structByName(t, info, "Default")
-	if defaultSt.PackAlign != 1 || defaultSt.StructSize != 5 || defaultSt.Fields[1].Offset != 1 {
-		t.Fatalf("Default layout = pack %d size %d B offset %d", defaultSt.PackAlign, defaultSt.StructSize, defaultSt.Fields[1].Offset)
+	if hasStruct(info, "Default") {
+		t.Fatal("Default should not be generated without an active pack directive")
 	}
 
 	pack2 := structByName(t, info, "Pack2")
@@ -96,14 +104,12 @@ type BackToDefault struct {
 		t.Fatalf("BackToPack2 layout = pack %d size %d B offset %d", backToPack2.PackAlign, backToPack2.StructSize, backToPack2.Fields[1].Offset)
 	}
 
-	reset := structByName(t, info, "Reset")
-	if reset.PackAlign != 1 || reset.StructSize != 5 || reset.Fields[1].Offset != 1 {
-		t.Fatalf("Reset layout = pack %d size %d B offset %d", reset.PackAlign, reset.StructSize, reset.Fields[1].Offset)
+	if hasStruct(info, "Reset") {
+		t.Fatal("Reset should not be generated after pack() clears the active pack directive")
 	}
 
-	backToDefault := structByName(t, info, "BackToDefault")
-	if backToDefault.PackAlign != 1 || backToDefault.StructSize != 5 || backToDefault.Fields[1].Offset != 1 {
-		t.Fatalf("BackToDefault layout = pack %d size %d B offset %d", backToDefault.PackAlign, backToDefault.StructSize, backToDefault.Fields[1].Offset)
+	if hasStruct(info, "BackToDefault") {
+		t.Fatal("BackToDefault should not be generated after popping to an empty pack context")
 	}
 }
 
@@ -164,6 +170,7 @@ type Inner struct {
 }
 //mkpackstruct:pack(pop)
 
+//mkpackstruct:pack(1)
 type Outer struct {
 	A byte
 	B [2]Inner

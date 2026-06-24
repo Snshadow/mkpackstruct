@@ -103,6 +103,11 @@ func packAlignForType(t types.Type, inherited int64, namedPack namedPackFunc) in
 	return inherited
 }
 
+type packState struct {
+	active bool
+	align  int64
+}
+
 // getStructInfo returns infomation of a struct and its fields.
 func getStructInfo(st *types.Struct, sizeInfo *sizes.PackedSizes, name string, packAlign int64, namedPack namedPackFunc) StructInfo {
 	var stInfo StructInfo
@@ -195,7 +200,7 @@ func directiveLines(text string) []string {
 	return nil
 }
 
-func applyPackDirective(fset *token.FileSet, c *ast.Comment, current *int64, stack *[]int64) error {
+func applyPackDirective(fset *token.FileSet, c *ast.Comment, current *packState, stack *[]packState) error {
 	const prefix = "mkpackstruct:pack"
 
 	for _, line := range directiveLines(c.Text) {
@@ -210,7 +215,7 @@ func applyPackDirective(fset *token.FileSet, c *ast.Comment, current *int64, sta
 
 		body := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(rest, "("), ")"))
 		if body == "" {
-			*current = sizes.DefaultPackAlign
+			*current = packState{}
 			continue
 		}
 
@@ -228,7 +233,7 @@ func applyPackDirective(fset *token.FileSet, c *ast.Comment, current *int64, sta
 				return fmt.Errorf("%s: %w", fset.Position(c.Pos()), err)
 			}
 			*stack = append(*stack, *current)
-			*current = n
+			*current = packState{active: true, align: n}
 		case len(parts) == 1 && parts[0] == "pop":
 			if len(*stack) == 0 {
 				return fmt.Errorf("%s: mkpackstruct pack pop with empty stack", fset.Position(c.Pos()))
@@ -241,7 +246,7 @@ func applyPackDirective(fset *token.FileSet, c *ast.Comment, current *int64, sta
 			if err != nil {
 				return fmt.Errorf("%s: %w", fset.Position(c.Pos()), err)
 			}
-			*current = n
+			*current = packState{active: true, align: n}
 		default:
 			return fmt.Errorf("%s: malformed mkpackstruct pack directive", fset.Position(c.Pos()))
 		}
@@ -254,8 +259,8 @@ func collectStructPackAligns(fset *token.FileSet, files []*ast.File) (map[string
 	packByName := make(map[string]int64)
 
 	for _, file := range files {
-		current := sizes.DefaultPackAlign
-		var stack []int64
+		var current packState
+		var stack []packState
 		commentIdx := 0
 		prevEnd := file.Package
 
@@ -292,8 +297,8 @@ func collectStructPackAligns(fset *token.FileSet, files []*ast.File) (map[string
 							}
 						}
 					}
-					if _, ok := ts.Type.(*ast.StructType); ok {
-						packByName[ts.Name.Name] = current
+					if _, ok := ts.Type.(*ast.StructType); ok && current.active {
+						packByName[ts.Name.Name] = current.align
 					}
 				}
 			}
@@ -409,12 +414,12 @@ func GetPackInfo(filename string, wordSize int64, parsedFiles ...string) (GoPack
 
 	namedPack := func(obj *types.TypeName) int64 {
 		if obj == nil || obj.Pkg() == nil || obj.Pkg().Path() != pkg.Path() {
-			return sizes.DefaultPackAlign
+			return 0
 		}
 		if a, ok := structPackAligns[obj.Name()]; ok {
 			return a
 		}
-		return sizes.DefaultPackAlign
+		return 0
 	}
 	layoutSizes := sizes.NewPackedSizesWithNamedPack(wordSize, namedPack)
 
@@ -439,7 +444,11 @@ func GetPackInfo(filename string, wordSize int64, parsedFiles ...string) (GoPack
 					if posInfo != nil {
 						posName := filepath.ToSlash(posInfo.Name())
 						if posName == targetFilename {
-							stInfo := getStructInfo(st, layoutSizes, typeName.Name(), namedPack(typeName), namedPack)
+							packAlign := namedPack(typeName)
+							if packAlign == 0 {
+								continue
+							}
+							stInfo := getStructInfo(st, layoutSizes, typeName.Name(), packAlign, namedPack)
 							stInfo.StructName = name
 							structInfos = append(structInfos, &stInfo)
 						}

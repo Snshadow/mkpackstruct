@@ -1,6 +1,6 @@
 # mkpackstruct
 
-mkpackstruct generates go file for packing struct, which can be useful for using structs with [packed attribute](https://gcc.gnu.org/onlinedocs/gcc/Common-Type-Attributes.html#index-packed-type-attribute) from gcc or with [pack pragma](https://learn.microsoft.com/en-us/cpp/preprocessor/pack)(particularly with `#pragma pack(1)`) from MSVC. Instead of using `reflect` package to create packed struct at runtime, this repository seeks to create functions for packing in advance, to reduce runtime overheads.
+mkpackstruct generates go file for packing struct, which can be useful for using structs with [aligned attribute](https://gcc.gnu.org/onlinedocs/gcc/Common-Attributes.html#index-aligned) from gcc or with [pack pragma](https://learn.microsoft.com/en-us/cpp/preprocessor/pack) from MSVC. Instead of using `reflect` package with tags to create packed struct at runtime, this repository seeks to create functions for packing in advance, to reduce runtime overheads.
 
 ## Features
 
@@ -31,23 +31,35 @@ func ToStruct[P PackedStruct](buf []byte) (P, error) {
 
 note that this function returns an error if the size of the byte slice does not match the packed size of the struct.
 
-Struct packing defaults to `pack(1)` for backward compatibility. Use Go comments to change the current pack alignment in source order:
+Only structs declared while a `mkpackstruct:pack` directive is active are generated. Use Go comments to change the current pack alignment in source order:
 
 ```go
+//mkpackstruct:pack(1)
+type Packed1 struct {
+    Flag byte
+    Size uint32
+}
+
 //mkpackstruct:pack(push, 2)
-type Header struct {
+type Packed2 struct {
     Flag byte
     Size uint32
 }
 //mkpackstruct:pack(pop)
 
-type Packed1Again struct {
+type AnotherPacked1 struct {
+    Flag byte
+    Size uint32
+}
+
+//mkpackstruct:pack()
+type NotGenerated struct {
     Flag byte
     Size uint32
 }
 ```
 
-Supported directives are `pack(N)`, `pack()`, `pack(push)`, `pack(push, N)`, and `pack(pop)`, where `N` is `1`, `2`, `4`, `8`, or `16`.
+Supported directives are `pack(N)`, `pack()`, `pack(push)`, `pack(push, N)`, and `pack(pop)`, where `N` is `1`, `2`, `4`, `8`, or `16`. `pack()` clears the active pack context, so following structs are not generated until another pack directive sets an active alignment.
 
 ## Usage
 

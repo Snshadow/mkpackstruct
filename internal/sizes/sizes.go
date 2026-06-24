@@ -17,10 +17,6 @@ import (
 	"unsafe"
 )
 
-const (
-	DefaultPackAlign int64 = 1
-)
-
 type NamedPackFunc func(*types.TypeName) int64
 
 // PackedSizes is similar to StdSize from "go/types", except struct member
@@ -44,13 +40,16 @@ func NewPackedSizesWithNamedPack(wordSize int64, namedPack NamedPackFunc) *Packe
 
 	return &PackedSizes{
 		wordSize:  wordSize,
-		maxAlign:  DefaultPackAlign,
+		maxAlign:  naturalMaxAlign(wordSize),
 		namedPack: namedPack,
 	}
 }
 
 func (s *PackedSizes) WithMaxAlign(maxAlign int64) *PackedSizes {
 	cp := *s
+	if maxAlign == 0 {
+		maxAlign = naturalMaxAlign(s.wordSize)
+	}
 	cp.maxAlign = maxAlign
 	return &cp
 }
@@ -198,13 +197,22 @@ func (s *PackedSizes) structAlign(st *types.Struct) int64 {
 }
 
 func (s *PackedSizes) packAlignOfNamed(obj *types.TypeName) int64 {
-	if s.namedPack == nil {
-		return DefaultPackAlign
+	if s.namedPack != nil {
+		if a := s.namedPack(obj); a != 0 {
+			return a
+		}
 	}
-	if a := s.namedPack(obj); a != 0 {
-		return a
+	return naturalMaxAlign(s.wordSize)
+}
+
+func naturalMaxAlign(wordSize int64) int64 {
+	if wordSize == 0 {
+		wordSize = int64(unsafe.Sizeof(uintptr(0)))
 	}
-	return DefaultPackAlign
+	if wordSize < 8 {
+		return wordSize
+	}
+	return 8
 }
 
 // ---- copied unexported functions from "go/types" ----
