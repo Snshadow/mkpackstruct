@@ -4,7 +4,7 @@ mkpackstruct generates go file for packing struct, which can be useful for using
 
 ## Features
 
-It reads the single go file with struct type declarations, then creates `ToPackedByte()` method for each structs in go file like
+It reads single go file with struct type declarations, then creates `ToPackedByte()` method for each structs in go file as
 
 ```go
 func (s *SomeStruct) ToPackedByte() []byte {
@@ -15,7 +15,7 @@ func (s *SomeStruct) ToPackedByte() []byte {
 }
 ```
 
-which returns byte slice which has serialized struct data without any padding.
+which returns byte slice with serialized struct data using the configured pack layout.
 
 It also creates generic function `ToStruct[P PackedStruct](st P) (P, error)` for unpacking structs from serialized byte slice by creating type union for structs in the specified go file,
 
@@ -30,6 +30,24 @@ func ToStruct[P PackedStruct](buf []byte) (P, error) {
 ```
 
 note that this function returns an error if the size of the byte slice does not match the packed size of the struct.
+
+Struct packing defaults to `pack(1)` for backward compatibility. Use Go comments to change the current pack alignment in source order:
+
+```go
+//mkpackstruct:pack(push, 2)
+type Header struct {
+    Flag byte
+    Size uint32
+}
+//mkpackstruct:pack(pop)
+
+type Packed1Again struct {
+    Flag byte
+    Size uint32
+}
+```
+
+Supported directives are `pack(N)`, `pack()`, `pack(push)`, `pack(push, N)`, and `pack(pop)`, where `N` is `1`, `2`, `4`, `8`, or `16`.
 
 ## Usage
 

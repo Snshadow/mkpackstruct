@@ -39,7 +39,13 @@ func parseRepeatedStruct(s string) *repeatedStruct {
 	}
 }
 
-func writePackedBytes(fldInfo []*parsestruct.FieldInfo, fldPrefix string, addIndent int, rpSt *repeatedStruct) string {
+func writePadding(b *strings.Builder, indent string, size int64) {
+	if size > 0 {
+		fmt.Fprintf(b, indent+"b.Write(make([]byte, %d))\n", size)
+	}
+}
+
+func writePackedBytes(stInfo *parsestruct.StructInfo, fldPrefix string, addIndent int, rpSt *repeatedStruct) string {
 	var b strings.Builder
 
 	indent := strings.Repeat("\t", 1+addIndent)
@@ -54,18 +60,23 @@ func writePackedBytes(fldInfo []*parsestruct.FieldInfo, fldPrefix string, addInd
 		fieldIndent = strings.Repeat("\t", 2+addIndent) // strings.Repeat returns optimized value with '\t'
 	}
 
-	for _, field := range fldInfo {
+	var offset int64
+	for _, field := range stInfo.Fields {
+		writePadding(&b, fieldIndent, field.Offset-offset)
 		if field.StructInfo != nil {
-			b.WriteString(writePackedBytes(field.StructInfo.Fields, fldPrefix+field.Name+".", addIndent+1, parseRepeatedStruct(field.Type)))
+			b.WriteString(writePackedBytes(field.StructInfo, fldPrefix+field.Name+".", addIndent+1, parseRepeatedStruct(field.Type)))
 		} else {
 			fieldExpr := fldPrefix + field.Name
 
 			fmt.Fprintf(&b, fieldIndent+"b.Write(unsafe.Slice((*byte)(unsafe.Pointer(&%s)), %d))\n", fieldExpr, field.Size)
 		}
+		offset = field.Offset + field.Size
 	}
+	writePadding(&b, fieldIndent, stInfo.StructSize-offset)
 
 	if rpSt != nil {
-		b.WriteString(indent + "}\n")
+		b.WriteString(indent)
+		b.WriteString("}\n")
 	}
 
 	return b.String()
@@ -145,7 +156,7 @@ func collectUsedImports(info parsestruct.GoPackInfo) []string {
 	// needed for buffer operations in ToPackedByte
 	imported["bytes"] = struct{}{}
 	// needed for error handling in ToStruct
-	imported["errors"] = struct{}{}
+	imported["fmt"] = struct{}{}
 
 	// helper function to check if a type uses a package
 	checkType := func(typeName string) {
@@ -157,7 +168,7 @@ func collectUsedImports(info parsestruct.GoPackInfo) []string {
 			patterns := [...]string{
 				pkgName + ".",             // import declaration
 				"*" + pkgName + ".",       // pointer
-				"[]" + pkgName + ".",      // slice 
+				"[]" + pkgName + ".",      // slice
 				"[]*" + pkgName + ".",     // slice of pointers
 				"map[" + pkgName + ".",    // map with package key type
 				"]" + pkgName + ".",       // map with package value type
@@ -265,7 +276,7 @@ func (g *Generator) writeStructPackerFunctions() {
 		g.Printf("func (s *%s) ToPackedByte() []byte {\n", info.StructName)
 		g.buf.WriteString("\tvar b bytes.Buffer\n\n")
 
-		g.buf.WriteString(writePackedBytes(info.Fields, "s.", 0, nil))
+		g.buf.WriteString(writePackedBytes(info, "s.", 0, nil))
 
 		g.buf.WriteString("\n\treturn b.Bytes()\n}\n\n")
 	}
@@ -300,7 +311,7 @@ func (g *Generator) writeGetPackedSize() {
 func (g *Generator) writeGenericStructUnpacker() {
 	g.buf.WriteString("func ToStruct[P PackedStruct](buf []byte) (P, error) {\n")
 	g.buf.WriteString("\tvar st P // empty value used for type switch and returning error\n")
-	g.buf.WriteString("\tvar result any // empty interface for holding generated struct before assertion\n")
+	g.buf.WriteString("\tvar result any // empty interface for holding generated struct before type assertion\n")
 	g.buf.WriteString("\n\tswitch sst := any(st).(type) { // convert to any for type switch\n")
 	for _, info := range g.packInfo.StructInfo {
 		if info == nil {
@@ -310,8 +321,8 @@ func (g *Generator) writeGenericStructUnpacker() {
 
 		g.Printf("\tcase %s:\n", info.StructName)
 
-		g.buf.WriteString("\t\tif GetPackedSize(sst) != len(buf) {\n")
-		g.buf.WriteString("\t\t\t return st, errors.New(\"the size of buffer does not match the size of struct\")\n\t\t\t}\n\n")
+		g.buf.WriteString("\t\tif len(buf) != GetPackedSize(sst) {\n")
+		g.buf.WriteString("\t\t\treturn st, fmt.Errorf(\"the size of buffer %d does not match the size of struct %d\", len(buf), GetPackedSize(sst))\n\t\t}\n\n")
 
 		g.buf.WriteString(writeUnpackedFields(info, 0, 0, "", nil))
 	}

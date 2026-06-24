@@ -1,0 +1,16 @@
+version: '3'
+
+tasks:
+  test:
+    cmds:
+      - task: test-internal
+      - task: test-pack
+
+  test-internal:
+    cmds:
+      - go test ./gengo ./parsestruct ./internal/sizes -v -count=1
+
+  test-pack:
+    cmds:
+      - go run . -filename testdata/sample.go -parsed sample.go,internal.go -output testdata/sample_packstruct.go
+      - go test . -v -count=1 -run TestPacked

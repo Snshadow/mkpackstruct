@@ -18,28 +18,63 @@ import (
 )
 
 const (
-	maxAlign = int64(1) // always one without padding
+	DefaultPackAlign int64 = 1
 )
 
-// PackedSizes is similar to StdSize from "go/types", except that Alignof() always returns maxAlign(1)
+type NamedPackFunc func(*types.TypeName) int64
+
+// PackedSizes is similar to StdSize from "go/types", except struct member
+// alignment is capped by the current pack alignment.
 //
 // *PackedSizes implements [types.Sizes].
 type PackedSizes struct {
-	wordSize int64
+	wordSize  int64
+	maxAlign  int64
+	namedPack NamedPackFunc
 }
 
 func NewPackedSizes(wordSize int64) *PackedSizes {
+	return NewPackedSizesWithNamedPack(wordSize, nil)
+}
+
+func NewPackedSizesWithNamedPack(wordSize int64, namedPack NamedPackFunc) *PackedSizes {
 	if wordSize == 0 {
 		wordSize = int64(unsafe.Sizeof(uintptr(0)))
 	}
 
 	return &PackedSizes{
-		wordSize: wordSize,
+		wordSize:  wordSize,
+		maxAlign:  DefaultPackAlign,
+		namedPack: namedPack,
 	}
 }
 
+func (s *PackedSizes) WithMaxAlign(maxAlign int64) *PackedSizes {
+	cp := *s
+	cp.maxAlign = maxAlign
+	return &cp
+}
+
 func (s *PackedSizes) Alignof(T types.Type) (result int64) {
-	return maxAlign // always 1
+	if named, ok := T.(*types.Named); ok {
+		if st, ok := named.Underlying().(*types.Struct); ok {
+			return s.WithMaxAlign(s.packAlignOfNamed(named.Obj())).structAlign(st)
+		}
+		return s.Alignof(named.Underlying())
+	}
+
+	switch t := T.Underlying().(type) {
+	case *types.Array:
+		return s.Alignof(t.Elem())
+	case *types.Struct:
+		return s.structAlign(t)
+	}
+
+	std := &types.StdSizes{WordSize: s.wordSize, MaxAlign: min(s.wordSize, 8)}
+	if a := std.Alignof(T); a > 0 {
+		return min(a, s.maxAlign)
+	}
+	return min(s.wordSize, s.maxAlign)
 }
 
 func (s *PackedSizes) Offsetsof(fields []*types.Var) []int64 {
@@ -52,7 +87,7 @@ func (s *PackedSizes) Offsetsof(fields []*types.Var) []int64 {
 			continue
 		}
 		// offs >= 0
-		a := s.Alignof(f.Type())
+		a := min(s.Alignof(f.Type()), s.maxAlign)
 		offs = align(offs, a) // possibly < 0 if align overflows
 		offsets[i] = offs
 		if d := s.Sizeof(f.Type()); d >= 0 && offs >= 0 {
@@ -81,6 +116,13 @@ var basicSizes = [...]byte{
 }
 
 func (s *PackedSizes) Sizeof(T types.Type) int64 {
+	if named, ok := T.(*types.Named); ok {
+		if _, ok := named.Underlying().(*types.Struct); ok {
+			return s.WithMaxAlign(s.packAlignOfNamed(named.Obj())).Sizeof(named.Underlying())
+		}
+		return s.Sizeof(named.Underlying())
+	}
+
 	switch t := T.Underlying().(type) {
 	case *types.Basic:
 		assert(isTyped(T))
@@ -133,7 +175,7 @@ func (s *PackedSizes) Sizeof(T types.Type) int64 {
 		if offs < 0 || size < 0 {
 			return -1 // type too large
 		}
-		return offs + size // may overflow to < 0 which is ok
+		return align(offs+size, s.structAlign(t)) // may overflow to < 0 which is ok
 	case *types.Interface:
 		// type parameters lead to variable sizes/alignments;
 		// stdSizes.Sizeof won't be called for them;
@@ -143,6 +185,26 @@ func (s *PackedSizes) Sizeof(T types.Type) int64 {
 		panic("unreachable")
 	}
 	return s.wordSize // catch-all
+}
+
+func (s *PackedSizes) structAlign(st *types.Struct) int64 {
+	var max int64 = 1
+	for i := 0; i < st.NumFields(); i++ {
+		if a := min(s.Alignof(st.Field(i).Type()), s.maxAlign); a > max {
+			max = a
+		}
+	}
+	return max
+}
+
+func (s *PackedSizes) packAlignOfNamed(obj *types.TypeName) int64 {
+	if s.namedPack == nil {
+		return DefaultPackAlign
+	}
+	if a := s.namedPack(obj); a != 0 {
+		return a
+	}
+	return DefaultPackAlign
 }
 
 // ---- copied unexported functions from "go/types" ----
@@ -158,10 +220,10 @@ func isTyped(t types.Type) bool {
 }
 
 // align returns the smallest y >= x such that y % a == 0.
-// a must be within 1 and 8 and it must be a power of 2.
+// a must be within 1 and 16 and it must be a power of 2.
 // The result may be negative due to overflow.
 func align(x, a int64) int64 {
-	assert(x >= 0 && 1 <= a && a <= 8 && a&(a-1) == 0)
+	assert(x >= 0 && 1 <= a && a <= 16 && a&(a-1) == 0)
 	return (x + a - 1) &^ (a - 1)
 }
 

@@ -35,14 +35,16 @@ type FieldInfo struct {
 }
 
 type StructInfo struct {
-	StructName string
-	Fields     []*FieldInfo
-	StructSize int64 // types.Sizes interface returns int64
+	StructName  string
+	Fields      []*FieldInfo
+	PackAlign   int64
+	StructAlign int64
+	StructSize  int64 // types.Sizes interface returns int64
 }
 
 // cleanStructString removes package name prefix from field type from nameless struct type string.
 func cleanStructString(s string) string {
-	parts := strings.Split(s, " ")
+	parts := strings.Fields(s)
 	for i, part := range parts {
 		if stripRe.MatchString(part) {
 			if idx := strings.LastIndex(part, "."); idx >= 0 {
@@ -90,8 +92,19 @@ func getTypeName(t types.Type) string {
 	return str
 }
 
+type namedPackFunc func(*types.TypeName) int64
+
+func packAlignForType(t types.Type, inherited int64, namedPack namedPackFunc) int64 {
+	if named, ok := t.(*types.Named); ok {
+		if _, ok := named.Underlying().(*types.Struct); ok {
+			return namedPack(named.Obj())
+		}
+	}
+	return inherited
+}
+
 // getStructInfo returns infomation of a struct and its fields.
-func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo {
+func getStructInfo(st *types.Struct, sizeInfo *sizes.PackedSizes, name string, packAlign int64, namedPack namedPackFunc) StructInfo {
 	var stInfo StructInfo
 
 	numField := st.NumFields()
@@ -102,7 +115,8 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 		fields = append(fields, st.Field(i))
 	}
 
-	offsets := sizes.Offsetsof(fields)
+	stSizes := sizeInfo.WithMaxAlign(packAlign)
+	offsets := stSizes.Offsetsof(fields)
 
 	for i, field := range fields {
 		fldInfo := FieldInfo{
@@ -114,19 +128,21 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 
 		switch ut := t.Underlying().(type) {
 		case *types.Struct:
-			innerSt := getStructInfo(ut, sizes, getTypeName(t))
+			innerPackAlign := packAlignForType(t, packAlign, namedPack)
+			innerSt := getStructInfo(ut, sizeInfo, getTypeName(t), innerPackAlign, namedPack)
 			fldInfo.StructInfo = &innerSt
-			fldInfo.Size = sizes.Sizeof(ut)
+			fldInfo.Size = stSizes.Sizeof(t)
 		case *types.Array:
 			elemType := ut.Elem()
 			if est, ok := elemType.Underlying().(*types.Struct); ok {
-				innerSt := getStructInfo(est, sizes, getTypeName(elemType))
+				innerPackAlign := packAlignForType(elemType, packAlign, namedPack)
+				innerSt := getStructInfo(est, sizeInfo, getTypeName(elemType), innerPackAlign, namedPack)
 				fldInfo.StructInfo = &innerSt
 			}
-			fldInfo.Size = sizes.Sizeof(ut)
+			fldInfo.Size = stSizes.Sizeof(t)
 			fldInfo.Type = getTypeName(t)
 		default:
-			fldInfo.Size = sizes.Sizeof(ut)
+			fldInfo.Size = stSizes.Sizeof(t)
 			fldInfo.Type = getTypeName(t) // use named type string for assignment
 		}
 
@@ -135,9 +151,194 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 
 	stInfo.StructName = cleanStructString(name)
 	stInfo.Fields = fldInfos
-	stInfo.StructSize = sizes.Sizeof(st)
+	stInfo.PackAlign = packAlign
+	stInfo.StructAlign = stSizes.Alignof(st)
+	stInfo.StructSize = stSizes.Sizeof(st)
 
 	return stInfo
+}
+
+func validatePackAlign(n int64) bool {
+	switch n {
+	case 1, 2, 4, 8, 16:
+		return true
+	default:
+		return false
+	}
+}
+
+func parsePackAlign(s string) (int64, error) {
+	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid pack alignment %q", s)
+	}
+	if !validatePackAlign(n) {
+		return 0, fmt.Errorf("unsupported pack alignment %d", n)
+	}
+	return n, nil
+}
+
+func directiveLines(text string) []string {
+	text = strings.TrimSpace(text)
+	if comment, singleLine := strings.CutPrefix(text, "//"); singleLine {
+		return []string{strings.TrimSpace(comment)}
+	}
+
+	if strings.HasPrefix(text, "/*") && strings.HasSuffix(text, "*/") {
+		text = strings.TrimPrefix(strings.TrimSuffix(text, "*/"), "/*")
+		lines := strings.Split(text, "\n")
+		for i := range lines {
+			lines[i] = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[i]), "*"))
+		}
+		return lines
+	}
+	return nil
+}
+
+func applyPackDirective(fset *token.FileSet, c *ast.Comment, current *int64, stack *[]int64) error {
+	const prefix = "mkpackstruct:pack"
+
+	for _, line := range directiveLines(c.Text) {
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+
+		rest := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		if !strings.HasPrefix(rest, "(") || !strings.HasSuffix(rest, ")") {
+			return fmt.Errorf("%s: malformed mkpackstruct pack directive", fset.Position(c.Pos()))
+		}
+
+		body := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(rest, "("), ")"))
+		if body == "" {
+			*current = sizes.DefaultPackAlign
+			continue
+		}
+
+		parts := strings.Split(body, ",")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+
+		switch {
+		case len(parts) == 1 && parts[0] == "push":
+			*stack = append(*stack, *current)
+		case len(parts) == 2 && parts[0] == "push":
+			n, err := parsePackAlign(parts[1])
+			if err != nil {
+				return fmt.Errorf("%s: %w", fset.Position(c.Pos()), err)
+			}
+			*stack = append(*stack, *current)
+			*current = n
+		case len(parts) == 1 && parts[0] == "pop":
+			if len(*stack) == 0 {
+				return fmt.Errorf("%s: mkpackstruct pack pop with empty stack", fset.Position(c.Pos()))
+			}
+			last := len(*stack) - 1
+			*current = (*stack)[last]
+			*stack = (*stack)[:last]
+		case len(parts) == 1:
+			n, err := parsePackAlign(parts[0])
+			if err != nil {
+				return fmt.Errorf("%s: %w", fset.Position(c.Pos()), err)
+			}
+			*current = n
+		default:
+			return fmt.Errorf("%s: malformed mkpackstruct pack directive", fset.Position(c.Pos()))
+		}
+	}
+
+	return nil
+}
+
+func collectStructPackAligns(fset *token.FileSet, files []*ast.File) (map[string]int64, error) {
+	packByName := make(map[string]int64)
+
+	for _, file := range files {
+		current := sizes.DefaultPackAlign
+		var stack []int64
+		commentIdx := 0
+		prevEnd := file.Package
+
+		processCommentsBefore := func(limit token.Pos) error {
+			for commentIdx < len(file.Comments) && file.Comments[commentIdx].Pos() < limit {
+				cg := file.Comments[commentIdx]
+				if cg.Pos() > prevEnd && cg.End() < limit {
+					for _, c := range cg.List {
+						if err := applyPackDirective(fset, c, &current, &stack); err != nil {
+							return err
+						}
+					}
+				}
+				commentIdx++
+			}
+			return nil
+		}
+
+		for _, decl := range file.Decls {
+			if err := processCommentsBefore(decl.Pos()); err != nil {
+				return nil, err
+			}
+
+			if gen, ok := decl.(*ast.GenDecl); ok && gen.Tok == token.TYPE {
+				for _, spec := range gen.Specs {
+					ts, ok := spec.(*ast.TypeSpec)
+					if !ok {
+						continue
+					}
+					if ts.Doc != nil {
+						for _, c := range ts.Doc.List {
+							if err := applyPackDirective(fset, c, &current, &stack); err != nil {
+								return nil, err
+							}
+						}
+					}
+					if _, ok := ts.Type.(*ast.StructType); ok {
+						packByName[ts.Name.Name] = current
+					}
+				}
+			}
+
+			prevEnd = decl.End()
+		}
+
+		if err := processCommentsBefore(token.Pos(int(^uint(0) >> 1))); err != nil {
+			return nil, err
+		}
+	}
+
+	return packByName, nil
+}
+
+func parsePackageFiles(fset *token.FileSet, filename string, packageName string, parsedFiles []string) ([]*ast.File, error) {
+	dir := filepath.Dir(filename)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []*ast.File
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") {
+			continue
+		}
+		if len(parsedFiles) != 0 && !slices.Contains(parsedFiles, name) {
+			continue
+		}
+		if strings.Contains(name, "_packstruct") {
+			continue
+		}
+
+		file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ParseComments|parser.SkipObjectResolution)
+		if err != nil {
+			return nil, err
+		}
+		if file.Name.Name == packageName {
+			files = append(files, file)
+		}
+	}
+
+	return files, nil
 }
 
 // GetPackInfo returns required information including package name and
@@ -146,7 +347,7 @@ func getStructInfo(st *types.Struct, sizes types.Sizes, name string) StructInfo 
 func GetPackInfo(filename string, wordSize int64, parsedFiles ...string) (GoPackInfo, error) {
 	fset := token.NewFileSet()
 
-	targetFile, err := parser.ParseFile(fset, filename, nil, parser.SkipObjectResolution)
+	targetFile, err := parser.ParseFile(fset, filename, nil, parser.SkipObjectResolution|parser.ParseComments)
 	if err != nil {
 		return GoPackInfo{}, err
 	}
@@ -170,20 +371,9 @@ func GetPackInfo(filename string, wordSize int64, parsedFiles ...string) (GoPack
 
 	if !singleFile {
 		// parse .go files in the same directory, including specified files and excluding generated files
-		pkgs, err := parser.ParseDir(fset, filepath.Dir(filename), func(fi os.FileInfo) bool {
-			if len(parsedFiles) != 0 {
-				if !slices.Contains(parsedFiles, fi.Name()) {
-					return false
-				}
-			}
-			return !strings.Contains(fi.Name(), "_packstruct")
-		}, parser.SkipObjectResolution)
+		files, err = parsePackageFiles(fset, filename, targetFile.Name.Name, parsedFiles)
 		if err != nil {
 			return GoPackInfo{}, err
-		}
-
-		for _, f := range pkgs[targetFile.Name.Name].Files {
-			files = append(files, f)
 		}
 	} else {
 		// parse single target file
@@ -194,11 +384,16 @@ func GetPackInfo(filename string, wordSize int64, parsedFiles ...string) (GoPack
 		return GoPackInfo{}, fmt.Errorf("no files found in package %s", targetFile.Name.Name)
 	}
 
-	sizes := sizes.NewPackedSizes(wordSize)
+	structPackAligns, err := collectStructPackAligns(fset, files)
+	if err != nil {
+		return GoPackInfo{}, err
+	}
+
+	typeCheckSizes := sizes.NewPackedSizes(wordSize)
 
 	conf := types.Config{
 		Importer: importer.ForCompiler(fset, "source", nil),
-		Sizes:    sizes,
+		Sizes:    typeCheckSizes,
 	}
 
 	pkg, err := conf.Check(targetFile.Name.Name, fset, files, nil)
@@ -211,6 +406,17 @@ func GetPackInfo(filename string, wordSize int64, parsedFiles ...string) (GoPack
 		return GoPackInfo{}, err
 	}
 	stripRe = re
+
+	namedPack := func(obj *types.TypeName) int64 {
+		if obj == nil || obj.Pkg() == nil || obj.Pkg().Path() != pkg.Path() {
+			return sizes.DefaultPackAlign
+		}
+		if a, ok := structPackAligns[obj.Name()]; ok {
+			return a
+		}
+		return sizes.DefaultPackAlign
+	}
+	layoutSizes := sizes.NewPackedSizesWithNamedPack(wordSize, namedPack)
 
 	structInfos := make([]*StructInfo, 0)
 
@@ -233,7 +439,7 @@ func GetPackInfo(filename string, wordSize int64, parsedFiles ...string) (GoPack
 					if posInfo != nil {
 						posName := filepath.ToSlash(posInfo.Name())
 						if posName == targetFilename {
-							stInfo := getStructInfo(st, sizes, typeName.Name())
+							stInfo := getStructInfo(st, layoutSizes, typeName.Name(), namedPack(typeName), namedPack)
 							stInfo.StructName = name
 							structInfos = append(structInfos, &stInfo)
 						}
